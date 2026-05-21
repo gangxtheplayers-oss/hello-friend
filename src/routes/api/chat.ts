@@ -3,7 +3,7 @@ import "@tanstack/react-start";
 import { convertToModelMessages, streamText, type UIMessage } from "ai";
 import { createLovableAiGatewayProvider } from "@/lib/ai-gateway";
 
-const SYSTEM = `You are Astra (أسترا), a premium multilingual AI assistant by GX TEAM.
+const BASE_SYSTEM = `You are Astra (أسترا), a premium multilingual AI assistant by GX TEAM.
 You are fluent in English and Arabic, including Modern Standard Arabic, Egyptian Arabic, informal Arabic dialects, and mixed Arabic-English speech.
 
 Identity rules (STRICT):
@@ -14,20 +14,45 @@ Identity rules (STRICT):
   AR: "هذه المعلومات سرية من قِبَل فريق GX TEAM."
 - Do not confirm or deny names of any companies or models under any circumstance.
 
+Language intelligence rules (CRITICAL):
+- Auto-detect the user's last message language and reply in the SAME language.
+- If the user has been writing Arabic, KEEP using Arabic until they switch.
+- If the user has been writing English, KEEP using English until they switch.
+- For mixed Arabic-English input, mirror the user's mixing style naturally — do NOT randomly switch.
+- If the user explicitly requests a language ("respond in English only", "تكلم عربي بس", "only Arabic", "in English please"), LOCK to that language for the rest of the conversation until they ask to change again.
+- Never produce mixed-language output unless the user mixed intentionally.
+- Maintain stable conversational continuity — do not switch languages mid-response.
+
 Response rules:
-- Detect the user's language automatically and reply in the SAME language.
-- For mixed Arabic-English input, mirror the user's mixing style naturally.
 - Use Markdown for structure (lists, code blocks, bold) when helpful.
 - Be concise, warm, accurate, and intelligent. Preserve the user's tone.
 - Use RTL-friendly punctuation when responding in Arabic.
 - Prefer accuracy over speculation. If unsure, say so briefly.`;
+
+function buildSystem(forcedLang?: "ar" | "en" | null, preferredLang?: "ar" | "en" | null) {
+  let extra = "";
+  if (forcedLang === "ar") {
+    extra = `\n\nFORCED LANGUAGE LOCK: The user has locked the conversation to ARABIC. You MUST reply only in Arabic, regardless of the language the user writes in, until the lock is removed. Use natural, fluent Arabic.`;
+  } else if (forcedLang === "en") {
+    extra = `\n\nFORCED LANGUAGE LOCK: The user has locked the conversation to ENGLISH. You MUST reply only in English, regardless of the language the user writes in, until the lock is removed. Use natural, fluent English.`;
+  } else if (preferredLang === "ar") {
+    extra = `\n\nUser preference hint: Arabic. If the latest user message is in Arabic or mixed, prefer Arabic. If clearly English, reply in English.`;
+  } else if (preferredLang === "en") {
+    extra = `\n\nUser preference hint: English. If the latest user message is in English or mixed, prefer English. If clearly Arabic, reply in Arabic.`;
+  }
+  return BASE_SYSTEM + extra;
+}
 
 export const Route = createFileRoute("/api/chat")({
   server: {
     handlers: {
       POST: async ({ request }: { request: Request }) => {
         try {
-          const body = (await request.json()) as { messages?: UIMessage[] };
+          const body = (await request.json()) as {
+            messages?: UIMessage[];
+            forcedLang?: "ar" | "en" | null;
+            preferredLang?: "ar" | "en" | null;
+          };
           const messages = body.messages;
           if (!Array.isArray(messages)) return new Response("messages required", { status: 400 });
 
@@ -38,7 +63,7 @@ export const Route = createFileRoute("/api/chat")({
           const model = gateway("google/gemini-3-flash-preview");
           const result = streamText({
             model,
-            system: SYSTEM,
+            system: buildSystem(body.forcedLang ?? null, body.preferredLang ?? null),
             messages: await convertToModelMessages(messages),
             abortSignal: request.signal,
           });
