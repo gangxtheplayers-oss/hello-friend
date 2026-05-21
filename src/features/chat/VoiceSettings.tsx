@@ -32,8 +32,11 @@ export function saveVoicePrefs(patch: Partial<VoicePrefs>) {
 }
 
 export function useVoicePrefs(): VoicePrefs {
-  const [prefs, setPrefs] = useState<VoicePrefs>(() => loadVoicePrefs());
+  // Start with DEFAULT so server and first client render match. Hydrate from
+  // localStorage after mount to avoid React hydration mismatches (#418).
+  const [prefs, setPrefs] = useState<VoicePrefs>(DEFAULT);
   useEffect(() => {
+    setPrefs(loadVoicePrefs());
     const handler = (e: Event) => {
       const detail = (e as CustomEvent<VoicePrefs>).detail;
       if (detail) setPrefs(detail);

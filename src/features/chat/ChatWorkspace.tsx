@@ -69,18 +69,24 @@ export function ChatWorkspace({ threadId }: { threadId?: string } = {}) {
   const { t, lang, setLang } = useI18n();
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
-  const [convs, setConvs] = useState<Conv[]>(() => loadConvs());
-  const [forcedLang, setForcedLang] = useState<"ar" | "en" | null>(() => {
-    if (typeof window === "undefined") return null;
+  // IMPORTANT: keep initial state SSR-safe — reading sessionStorage in the
+  // initializer causes a server/client hydration mismatch (React #418) which
+  // blanks the whole page. Hydrate after mount instead.
+  const [convs, setConvs] = useState<Conv[]>([]);
+  const [forcedLang, setForcedLang] = useState<"ar" | "en" | null>(null);
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => {
+    setConvs(loadConvs());
     const v = sessionStorage.getItem(FORCED_LANG_KEY);
-    return v === "ar" || v === "en" ? v : null;
-  });
+    if (v === "ar" || v === "en") setForcedLang(v);
+    setHydrated(true);
+  }, []);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || !hydrated) return;
     if (forcedLang) sessionStorage.setItem(FORCED_LANG_KEY, forcedLang);
     else sessionStorage.removeItem(FORCED_LANG_KEY);
-  }, [forcedLang]);
+  }, [forcedLang, hydrated]);
 
   // Keep refs so values used inside sendMessage body are always current
   const forcedLangRef = useRef(forcedLang);
@@ -88,8 +94,9 @@ export function ChatWorkspace({ threadId }: { threadId?: string } = {}) {
   useEffect(() => { forcedLangRef.current = forcedLang; }, [forcedLang]);
   useEffect(() => { langRef.current = lang; }, [lang]);
 
-  // Keep sessionStorage in sync
-  useEffect(() => { saveConvs(convs); }, [convs]);
+  // Keep sessionStorage in sync (only after we've hydrated, otherwise the
+  // first effect would overwrite stored chats with [] on mount).
+  useEffect(() => { if (hydrated) saveConvs(convs); }, [convs, hydrated]);
 
   // Active conversation id — decoupled from the URL so the first message
   // does NOT cause a route remount that loses the streaming state.
