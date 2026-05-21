@@ -72,20 +72,20 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { title: "Astra Intelligence — Your Personal Multilingual AI" },
+      { name: "description", content: "A premium multilingual AI assistant fluent in Arabic and English, including dialects and mixed speech." },
+      { name: "author", content: "Astra Intelligence" },
+      { property: "og:title", content: "Astra Intelligence — Your Personal Multilingual AI" },
+      { property: "og:description", content: "Premium AI that thinks in Arabic and English." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
     ],
     links: [
-      {
-        rel: "stylesheet",
-        href: appCss,
-      },
+      { rel: "stylesheet", href: appCss },
+      { rel: "preconnect", href: "https://fonts.googleapis.com" },
+      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
+      { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=Cairo:wght@400;500;600;700&display=swap" },
     ],
   }),
   shellComponent: RootShell,
@@ -108,12 +108,23 @@ function RootShell({ children }: { children: React.ReactNode }) {
   );
 }
 
+import { AuthProvider } from "@/lib/auth-context";
+import { I18nProvider } from "@/lib/i18n";
+import { Toaster } from "@/components/ui/sonner";
+import { PoweredByGx } from "@/components/PoweredByGx";
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
   return (
     <QueryClientProvider client={queryClient}>
-      <Outlet />
+      <I18nProvider>
+        <AuthProvider>
+          <Outlet />
+          <Toaster position="top-center" />
+          <PoweredByGx />
+        </AuthProvider>
+      </I18nProvider>
     </QueryClientProvider>
   );
 }
