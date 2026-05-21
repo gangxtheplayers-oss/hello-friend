@@ -17,7 +17,9 @@ import { VoiceOutput } from "@/features/chat/VoiceOutput";
 
 type Conv = { id: string; title: string; updated_at: string; messages: UIMessage[] };
 
-const STORAGE_KEY = "astra:session-chats";
+// Persist across tabs and browser restarts — sessionStorage was wiped
+// every time the tab closed, so users lost their chats.
+const STORAGE_KEY = "astra:chats-v1";
 const FORCED_LANG_KEY = "astra:forced-lang";
 
 function isRtl(text: string) {
@@ -27,7 +29,9 @@ function isRtl(text: string) {
 function loadConvs(): Conv[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = sessionStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(STORAGE_KEY)
+      // Migrate older sessionStorage data the first time we load.
+      ?? sessionStorage.getItem("astra:session-chats");
     return raw ? (JSON.parse(raw) as Conv[]) : [];
   } catch {
     return [];
@@ -37,7 +41,7 @@ function loadConvs(): Conv[] {
 function saveConvs(convs: Conv[]) {
   if (typeof window === "undefined") return;
   try {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(convs));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(convs));
   } catch {
     /* ignore quota errors */
   }
