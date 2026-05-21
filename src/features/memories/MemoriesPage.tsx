@@ -1,46 +1,37 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/lib/auth-context";
+import { useEffect, useState } from "react";
 import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Brain, Plus, Trash2 } from "lucide-react";
-import { toast } from "sonner";
 
-type Memory = { id: string; category: string; content: string; enabled: boolean; created_at: string };
+type Memory = { id: string; category: string; content: string; created_at: string };
+const KEY = "astra:session-memories";
+
+function load(): Memory[] {
+  if (typeof window === "undefined") return [];
+  try { return JSON.parse(sessionStorage.getItem(KEY) || "[]"); } catch { return []; }
+}
+function save(items: Memory[]) {
+  try { sessionStorage.setItem(KEY, JSON.stringify(items)); } catch { /* ignore */ }
+}
 
 export function MemoriesPage() {
-  const { user } = useAuth();
   const { t, lang } = useI18n();
-  const qc = useQueryClient();
+  const [items, setItems] = useState<Memory[]>([]);
   const [category, setCategory] = useState("note");
   const [content, setContent] = useState("");
 
-  const memQ = useQuery({
-    queryKey: ["memories", user?.id], enabled: !!user,
-    queryFn: async (): Promise<Memory[]> => {
-      const { data, error } = await supabase.from("memories").select("*").order("created_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as Memory[];
-    },
-  });
+  useEffect(() => { setItems(load()); }, []);
+  useEffect(() => { save(items); }, [items]);
 
-  const addM = useMutation({
-    mutationFn: async () => {
-      if (!user || !content.trim()) return;
-      const { error } = await supabase.from("memories").insert({ user_id: user.id, category, content: content.trim() });
-      if (error) throw error;
-    },
-    onSuccess: () => { setContent(""); qc.invalidateQueries({ queryKey: ["memories", user?.id] }); },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  const del = async (id: string) => {
-    await supabase.from("memories").delete().eq("id", id);
-    qc.invalidateQueries({ queryKey: ["memories", user?.id] });
+  const add = () => {
+    if (!content.trim()) return;
+    setItems((p) => [{
+      id: crypto.randomUUID(), category, content: content.trim(), created_at: new Date().toISOString(),
+    }, ...p]);
+    setContent("");
   };
+  const del = (id: string) => setItems((p) => p.filter((m) => m.id !== id));
 
   return (
     <div className="mx-auto max-w-3xl p-6">
@@ -48,22 +39,25 @@ export function MemoriesPage() {
         <Brain className="h-7 w-7 text-electric" />
         <h1 className="text-3xl font-semibold tracking-tight">{t("memories")}</h1>
       </div>
+      <div className="mb-4 rounded-md border border-dashed border-muted-foreground/30 p-2 text-[11px] leading-snug text-muted-foreground">
+        {lang === "ar" ? "الذكريات مؤقتة — تُمسح عند إغلاق المتصفح." : "Memories are temporary — cleared when you close the browser."}
+      </div>
 
       <div className="mb-8 rounded-2xl glass-strong p-4">
         <div className="grid gap-3 sm:grid-cols-[160px_1fr_auto]">
           <Input value={category} onChange={(e) => setCategory(e.target.value)} placeholder={lang === "ar" ? "التصنيف" : "Category"} />
-          <Input value={content} onChange={(e) => setContent(e.target.value)} placeholder={lang === "ar" ? "اكتب الذاكرة…" : "Write a memory…"} />
-          <Button onClick={() => addM.mutate()} disabled={!content.trim()} className="glow-electric"><Plus className="me-1 h-4 w-4" />{t("addMemory")}</Button>
+          <Input value={content} onChange={(e) => setContent(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} placeholder={lang === "ar" ? "اكتب الذاكرة…" : "Write a memory…"} />
+          <Button onClick={add} disabled={!content.trim()} className="glow-electric"><Plus className="me-1 h-4 w-4" />{t("addMemory")}</Button>
         </div>
       </div>
 
       <div className="space-y-2">
-        {memQ.data?.length === 0 && (
+        {items.length === 0 && (
           <div className="rounded-2xl glass p-12 text-center text-muted-foreground">
             {lang === "ar" ? "لا توجد ذكريات بعد." : "No memories yet."}
           </div>
         )}
-        {memQ.data?.map((m) => (
+        {items.map((m) => (
           <div key={m.id} className="group flex items-start gap-3 rounded-xl glass p-4">
             <span className="rounded-md bg-primary/15 px-2 py-0.5 text-xs text-primary">{m.category}</span>
             <div className="flex-1 text-sm">{m.content}</div>
