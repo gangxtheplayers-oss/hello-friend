@@ -57,6 +57,43 @@ function splitForSpeech(text: string) {
   return chunks;
 }
 
+type LangChunk = { text: string; lang: "ar" | "en" };
+
+// Split a chunk into runs of the same language so mixed-language assistant
+// replies switch to the correct voice for each run.
+function splitByLanguage(chunk: string): LangChunk[] {
+  const runs: LangChunk[] = [];
+  // Tokenise on whitespace but keep an Arabic/Latin classification per token.
+  const tokens = chunk.split(/(\s+)/);
+  let buf = "";
+  let bufLang: "ar" | "en" | null = null;
+  for (const tok of tokens) {
+    if (!tok) continue;
+    if (/^\s+$/.test(tok)) { buf += tok; continue; }
+    const hasAr = /[\u0600-\u06FF]/.test(tok);
+    const hasLatin = /[A-Za-z]/.test(tok);
+    const lang: "ar" | "en" | null = hasAr ? "ar" : hasLatin ? "en" : null;
+    if (lang == null) { buf += tok; continue; }
+    if (bufLang == null) { bufLang = lang; buf += tok; continue; }
+    if (lang === bufLang) { buf += tok; continue; }
+    const out = buf.trim();
+    if (out) runs.push({ text: out, lang: bufLang });
+    buf = tok;
+    bufLang = lang;
+  }
+  const out = buf.trim();
+  if (out && bufLang) runs.push({ text: out, lang: bufLang });
+  if (!runs.length) runs.push({ text: chunk, lang: isArabic(chunk) ? "ar" : "en" });
+  // Merge tiny runs (<3 chars) into the previous one to avoid micro-switches.
+  const merged: LangChunk[] = [];
+  for (const r of runs) {
+    const prev = merged[merged.length - 1];
+    if (prev && r.text.length < 3) prev.text += " " + r.text;
+    else merged.push({ ...r });
+  }
+  return merged;
+}
+
 function getVoices() {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return [];
   return window.speechSynthesis.getVoices();
@@ -195,14 +232,26 @@ export function VoiceOutput({
       const latestVoices = getVoices();
       const pool = latestVoices.length ? latestVoices : voices;
       const currentPrefs = loadVoicePrefs();
-      const selectedVoice = pickBestVoice(pool, langPrefix, currentPrefs);
 
-      const utterance = new SpeechSynthesisUtterance(chunk);
-      utterance.lang = selectedVoice?.lang || (langPrefix === "ar" ? "ar-SA" : "en-US");
+      // Per-language run detection: pick the dominant language of the chunk,
+      // but if it contains both scripts, route to the run's language voice.
+      const runs = splitByLanguage(chunk);
+      const primary = runs[0];
+      const runLang: "ar" | "en" = primary?.lang ?? langPrefix;
+      const selectedVoice = pickBestVoice(pool, runLang, currentPrefs);
+
+      const utterance = new SpeechSynthesisUtterance(primary?.text ?? chunk);
+      utterance.lang = selectedVoice?.lang || (runLang === "ar" ? "ar-SA" : "en-US");
       utterance.rate = speedRef.current;
-      utterance.pitch = 1.02;
+      utterance.pitch = runLang === "ar" ? 1.03 : 1.05;
       utterance.volume = 1;
       if (selectedVoice) utterance.voice = selectedVoice;
+
+      // If the chunk had multiple language runs, queue the remainder as
+      // separate utterances so each run gets the right voice — and only
+      // advance the chunk index when the last run finishes.
+      const extraRuns = runs.slice(1);
+      let runsRemaining = extraRuns.length;
 
       setDiag((d) => ({
         ...d,
@@ -222,6 +271,22 @@ export function VoiceOutput({
       };
       utterance.onend = () => {
         if (token !== playTokenRef.current || stoppedRef.current) return;
+        if (runsRemaining > 0) {
+          // Queue the next language run for this same chunk.
+          const next = extraRuns[extraRuns.length - runsRemaining];
+          runsRemaining -= 1;
+          const v = pickBestVoice(pool, next.lang, currentPrefs);
+          const u = new SpeechSynthesisUtterance(next.text);
+          u.lang = v?.lang || (next.lang === "ar" ? "ar-SA" : "en-US");
+          u.rate = speedRef.current;
+          u.pitch = next.lang === "ar" ? 1.03 : 1.05;
+          u.volume = 1;
+          if (v) u.voice = v;
+          u.onend = utterance.onend!;
+          u.onerror = utterance.onerror!;
+          window.speechSynthesis.speak(u);
+          return;
+        }
         chunkIndexRef.current += 1;
         setProgress(chunksRef.current.length ? chunkIndexRef.current / chunksRef.current.length : 1);
         // Small gap to avoid the Chrome cancel/queue race.
