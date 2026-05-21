@@ -60,15 +60,24 @@ const FEMALE_HINTS = [
 ];
 const MALE_HINTS = ["male", "man", "daniel", "alex", "fred", "david", "mark", "george", "tom", "ahmed", "khalid"];
 
+// Voices that tend to sound brighter / more lively across platforms.
+const ENERGETIC_HINTS = [
+  "ava", "ella", "joanna", "salli", "kimberly", "ivy", "amy",
+  "samantha", "victoria", "zira", "olivia", "emma", "sophia",
+  "google us english", "natural", "neural", "premium", "enhanced",
+  "هدى", "hoda", "salma", "laila", "amira",
+];
+
 function score(voice: SpeechSynthesisVoice, preferFemale: boolean) {
   const n = voice.name.toLowerCase();
   let s = 0;
   if (voice.localService) s += 5;
-  if (n.includes("google")) s += 3;
-  if (n.includes("natural") || n.includes("neural") || n.includes("premium") || n.includes("enhanced")) s += 4;
+  if (n.includes("google")) s += 4;
+  if (n.includes("natural") || n.includes("neural") || n.includes("premium") || n.includes("enhanced")) s += 6;
+  if (ENERGETIC_HINTS.some((h) => n.includes(h))) s += 4;
   if (preferFemale) {
-    if (FEMALE_HINTS.some((h) => n.includes(h))) s += 6;
-    if (MALE_HINTS.some((h) => n.includes(h))) s -= 4;
+    if (FEMALE_HINTS.some((h) => n.includes(h))) s += 8;
+    if (MALE_HINTS.some((h) => n.includes(h))) s -= 6;
   }
   return s;
 }
