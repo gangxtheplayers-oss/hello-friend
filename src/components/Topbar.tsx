@@ -1,14 +1,11 @@
-import { Link, useRouter } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import { AstraLogo } from "./AstraLogo";
-import { useAuth } from "@/lib/auth-context";
 import { useI18n } from "@/lib/i18n";
 import { Button } from "./ui/button";
-import { Globe, LogOut } from "lucide-react";
+import { Globe } from "lucide-react";
 
 export function Topbar() {
-  const { user, signOut } = useAuth();
   const { lang, setLang, t } = useI18n();
-  const router = useRouter();
 
   return (
     <header className="sticky top-0 z-40 glass-strong border-b">
@@ -25,19 +22,7 @@ export function Topbar() {
           <Button variant="ghost" size="icon" onClick={() => setLang(lang === "en" ? "ar" : "en")} aria-label="Language">
             <Globe className="h-4 w-4" />
           </Button>
-          {user ? (
-            <>
-              <Button asChild variant="ghost" size="sm"><Link to="/chat">{t("dashboard")}</Link></Button>
-              <Button variant="ghost" size="icon" onClick={async () => { await signOut(); router.navigate({ to: "/" }); }} aria-label="Sign out">
-                <LogOut className="h-4 w-4" />
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button asChild variant="ghost" size="sm"><Link to="/auth">{t("signIn")}</Link></Button>
-              <Button asChild size="sm" className="glow-electric"><Link to="/auth">{t("getStarted")}</Link></Button>
-            </>
-          )}
+          <Button asChild size="sm" className="glow-electric"><Link to="/chat">{t("getStarted")}</Link></Button>
         </div>
       </div>
     </header>

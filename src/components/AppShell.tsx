@@ -1,28 +1,12 @@
-import { Link, Outlet, useLocation, useRouter } from "@tanstack/react-router";
-import { useAuth } from "@/lib/auth-context";
-import { useEffect } from "react";
+import { Link, Outlet, useLocation } from "@tanstack/react-router";
 import { AstraLogo } from "./AstraLogo";
 import { useI18n } from "@/lib/i18n";
-import { Brain, CheckSquare, Globe, LogOut, MessageSquare, Settings } from "lucide-react";
+import { Brain, CheckSquare, Globe, MessageSquare, Settings } from "lucide-react";
 import { Button } from "./ui/button";
 
 export function AppShell() {
-  const { user, loading, signOut } = useAuth();
-  const router = useRouter();
   const location = useLocation();
   const { lang, setLang, t } = useI18n();
-
-  useEffect(() => {
-    if (!loading && !user) router.navigate({ to: "/auth" });
-  }, [user, loading, router]);
-
-  if (loading || !user) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="h-10 w-10 animate-pulse-glow rounded-full bg-primary/50" />
-      </div>
-    );
-  }
 
   const nav = [
     { to: "/chat", label: t("chat"), icon: MessageSquare },
@@ -56,11 +40,12 @@ export function AppShell() {
           })}
         </nav>
         <div className="mt-auto flex items-center justify-between border-t pt-3">
-          <div className="truncate px-2 text-xs text-muted-foreground">{user.email}</div>
-          <div className="flex">
-            <Button variant="ghost" size="icon" onClick={() => setLang(lang === "en" ? "ar" : "en")}><Globe className="h-4 w-4" /></Button>
-            <Button variant="ghost" size="icon" onClick={async () => { await signOut(); router.navigate({ to: "/" }); }}><LogOut className="h-4 w-4" /></Button>
+          <div className="truncate px-2 text-xs text-muted-foreground">
+            {lang === "ar" ? "جلسة خاصة" : "Private session"}
           </div>
+          <Button variant="ghost" size="icon" onClick={() => setLang(lang === "en" ? "ar" : "en")}>
+            <Globe className="h-4 w-4" />
+          </Button>
         </div>
       </aside>
       <main className="min-w-0 flex-1">

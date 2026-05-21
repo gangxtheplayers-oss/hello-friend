@@ -1,27 +1,21 @@
 import { useI18n } from "@/lib/i18n";
-import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Download } from "lucide-react";
+import { Download, Trash2 } from "lucide-react";
+
+const KEYS = ["astra:session-chats", "astra:session-tasks", "astra:session-memories", "astra:voice-prefs"];
 
 export function SettingsPage() {
   const { t, lang, setLang } = useI18n();
-  const { user } = useAuth();
 
-  const exportData = async () => {
-    if (!user) return;
-    const [conv, msg, tasks, mem] = await Promise.all([
-      supabase.from("conversations").select("*"),
-      supabase.from("messages").select("*"),
-      supabase.from("tasks").select("*"),
-      supabase.from("memories").select("*"),
-    ]);
-    const blob = new Blob([JSON.stringify({
-      conversations: conv.data, messages: msg.data, tasks: tasks.data, memories: mem.data,
-    }, null, 2)], { type: "application/json" });
+  const exportData = () => {
+    const out: Record<string, unknown> = {};
+    for (const k of KEYS) {
+      try { out[k] = JSON.parse(sessionStorage.getItem(k) || "null"); } catch { out[k] = null; }
+    }
+    const blob = new Blob([JSON.stringify(out, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url; a.download = `astra-export-${Date.now()}.json`; a.click();
@@ -29,15 +23,11 @@ export function SettingsPage() {
     toast.success(lang === "ar" ? "تم التصدير" : "Exported");
   };
 
-  const deleteAll = async () => {
-    if (!user) return;
-    if (!confirm(lang === "ar" ? "هل أنت متأكد من حذف كل البيانات؟" : "Delete all your data? This cannot be undone.")) return;
-    await Promise.all([
-      supabase.from("conversations").delete().eq("user_id", user.id),
-      supabase.from("tasks").delete().eq("user_id", user.id),
-      supabase.from("memories").delete().eq("user_id", user.id),
-    ]);
-    toast.success(lang === "ar" ? "تم حذف كل البيانات" : "All data deleted");
+  const deleteAll = () => {
+    if (!confirm(lang === "ar" ? "حذف كل بيانات الجلسة؟" : "Delete all session data?")) return;
+    for (const k of KEYS) sessionStorage.removeItem(k);
+    toast.success(lang === "ar" ? "تم الحذف" : "All session data deleted");
+    setTimeout(() => window.location.reload(), 600);
   };
 
   return (
@@ -62,12 +52,21 @@ export function SettingsPage() {
         </div>
 
         <div className="rounded-2xl glass-strong p-5">
-          <h2 className="mb-4 text-lg font-semibold">{lang === "ar" ? "الحساب والخصوصية" : "Account & Privacy"}</h2>
-          <p className="mb-4 text-sm text-muted-foreground">{user?.email}</p>
+          <h2 className="mb-2 text-lg font-semibold">{lang === "ar" ? "الخصوصية" : "Privacy"}</h2>
+          <p className="mb-4 text-sm text-muted-foreground">
+            {lang === "ar"
+              ? "جميع بياناتك تُخزَّن محليًا في هذا المتصفح فقط، وتُحذف تلقائيًا عند إغلاق التبويب."
+              : "All your data is stored locally in this browser only and is auto-deleted when you close the tab."}
+          </p>
           <div className="flex flex-wrap gap-2">
             <Button onClick={exportData} variant="outline"><Download className="me-2 h-4 w-4" />{t("exportData")}</Button>
-            <Button onClick={deleteAll} variant="destructive">{t("deleteAllData")}</Button>
+            <Button onClick={deleteAll} variant="destructive"><Trash2 className="me-2 h-4 w-4" />{t("deleteAllData")}</Button>
           </div>
+        </div>
+
+        <div className="rounded-2xl glass-strong p-5 text-sm text-muted-foreground">
+          <div className="mb-1 font-semibold text-foreground">{lang === "ar" ? "الدعم الفني" : "Technical Support"}</div>
+          <div>GX TEAM — <a href="tel:01095777037" className="text-electric hover:underline">01095777037</a></div>
         </div>
       </div>
     </div>

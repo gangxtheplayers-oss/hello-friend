@@ -47,7 +47,7 @@ function Landing() {
           </p>
           <div className="mt-10 flex items-center justify-center gap-3">
             <Button asChild size="lg" className="glow-electric">
-              <Link to="/auth">{t("getStarted")}</Link>
+              <Link to="/chat">{t("getStarted")}</Link>
             </Button>
             <Button asChild size="lg" variant="outline">
               <Link to="/" hash="features"><Globe2 className="me-2 h-4 w-4" />{t("features")}</Link>
@@ -93,7 +93,7 @@ function Landing() {
             {lang === "ar" ? "أنشئ حسابك في ثوانٍ. مجاني للبدء." : "Create your account in seconds. Free to start."}
           </p>
           <div className="mt-8">
-            <Button asChild size="lg" className="glow-electric"><Link to="/auth">{t("getStarted")}</Link></Button>
+            <Button asChild size="lg" className="glow-electric"><Link to="/chat">{t("getStarted")}</Link></Button>
           </div>
         </div>
       </section>
