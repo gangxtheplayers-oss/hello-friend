@@ -81,15 +81,15 @@ export function ChatWorkspace({ threadId }: { threadId?: string } = {}) {
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
     setConvs(loadConvs());
-    const v = sessionStorage.getItem(FORCED_LANG_KEY);
+    const v = localStorage.getItem(FORCED_LANG_KEY) ?? sessionStorage.getItem(FORCED_LANG_KEY);
     if (v === "ar" || v === "en") setForcedLang(v);
     setHydrated(true);
   }, []);
 
   useEffect(() => {
     if (typeof window === "undefined" || !hydrated) return;
-    if (forcedLang) sessionStorage.setItem(FORCED_LANG_KEY, forcedLang);
-    else sessionStorage.removeItem(FORCED_LANG_KEY);
+    if (forcedLang) localStorage.setItem(FORCED_LANG_KEY, forcedLang);
+    else localStorage.removeItem(FORCED_LANG_KEY);
   }, [forcedLang, hydrated]);
 
   // Keep refs so values used inside sendMessage body are always current
@@ -245,8 +245,8 @@ export function ChatWorkspace({ threadId }: { threadId?: string } = {}) {
         </div>
         <div className="mb-2 rounded-md border border-dashed border-muted-foreground/30 p-2 text-[11px] leading-snug text-muted-foreground">
           {lang === "ar"
-            ? "المحادثات مؤقتة — تُمسح عند إغلاق المتصفح."
-            : "Chats are temporary — cleared when you close the browser."}
+            ? "محفوظة على هذا المتصفح — تبقى بعد إعادة الفتح."
+            : "Saved on this browser — they stay after you reopen it."}
         </div>
         <ScrollArea className="flex-1">
           <div className="space-y-1">
