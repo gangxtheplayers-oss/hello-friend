@@ -143,6 +143,7 @@ export function VoiceOutput({
   const speedRef = useRef(speed);
   const instanceIdRef = useRef(Math.random());
   const keepAliveRef = useRef<number | null>(null);
+  const prevSpeedRef = useRef(speed);
 
   const prefs = useVoicePrefs();
   const speechText = useMemo(() => normalizeSpeechText(text), [text]);
@@ -283,8 +284,9 @@ export function VoiceOutput({
           u.pitch = next.lang === "ar" ? 1.18 : 1.22;
           u.volume = 1;
           if (v) u.voice = v;
-          u.onend = utterance.onend!;
-          u.onerror = utterance.onerror!;
+          // Re-bind to the same handlers so the chain advances correctly.
+          u.onend = utterance.onend;
+          u.onerror = utterance.onerror;
           window.speechSynthesis.speak(u);
           return;
         }
@@ -413,6 +415,12 @@ export function VoiceOutput({
 
   useEffect(() => {
     speedRef.current = speed;
+    // Only restart playback when SPEED actually changed. Without this guard
+    // the effect also fires on `state` transitions (idle→playing), which
+    // cancelled the running utterance and re-spoke chunk 0 — the user
+    // heard the first word ("Hello") twice.
+    if (prevSpeedRef.current === speed) return;
+    prevSpeedRef.current = speed;
     if (state === "playing" && activeRef.current) {
       const remaining = chunksRef.current.slice(chunkIndexRef.current);
       chunksRef.current = remaining;
