@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Plus, Send, Square, Trash2, Sparkles, Copy, Search } from "lucide-react";
+import { Plus, Send, Square, Trash2, Sparkles, Copy, Search, Home } from "lucide-react";
 import { toast } from "sonner";
 import { VoiceInput } from "@/features/chat/VoiceInput";
 import { VoiceOutput } from "@/features/chat/VoiceOutput";
@@ -209,6 +209,15 @@ export function ChatWorkspace({ threadId }: { threadId?: string } = {}) {
     <div className="flex h-screen">
       {/* Conversations sidebar */}
       <aside className="hidden w-72 shrink-0 flex-col border-e bg-sidebar/50 p-3 lg:flex">
+        <Button
+          variant="outline"
+          onClick={() => navigate({ to: "/" })}
+          className="mb-2 w-full justify-start border-electric/40 text-foreground hover:border-electric hover:bg-electric/10"
+          title={lang === "ar" ? "العودة للرئيسية" : "Back to Home"}
+        >
+          <Home className="me-2 h-4 w-4 text-electric" />
+          {lang === "ar" ? "الصفحة الرئيسية" : "Home"}
+        </Button>
         <Button
           onClick={() => {
             setActiveId(undefined);
