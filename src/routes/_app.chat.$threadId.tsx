@@ -1,12 +1,9 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { ChatWorkspace } from "@/features/chat/ChatWorkspace";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
+// Multi-chat mode was removed — always send users to the single chat page.
 export const Route = createFileRoute("/_app/chat/$threadId")({
-  head: () => ({ meta: [{ title: "Chat — Astra Intelligence" }] }),
-  component: ChatRoute,
+  beforeLoad: () => {
+    throw redirect({ to: "/chat" });
+  },
+  component: () => null,
 });
-
-function ChatRoute() {
-  const { threadId } = Route.useParams();
-  return <ChatWorkspace key={threadId} threadId={threadId} />;
-}
