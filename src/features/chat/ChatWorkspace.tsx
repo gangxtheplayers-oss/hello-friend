@@ -1,6 +1,6 @@
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { useNavigate, useRouter } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -18,6 +18,7 @@ import { VoiceOutput } from "@/features/chat/VoiceOutput";
 type Conv = { id: string; title: string; updated_at: string; messages: UIMessage[] };
 
 const STORAGE_KEY = "astra:session-chats";
+const FORCED_LANG_KEY = "astra:forced-lang";
 
 function isRtl(text: string) {
   return /[\u0600-\u06FF]/.test(text);
@@ -46,36 +47,89 @@ function newId() {
   return (crypto && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
 }
 
+function detectForcedLang(text: string): "ar" | "en" | "clear" | null {
+  const t = text.toLowerCase();
+  if (/(only|just|always)\s+(speak|reply|respond|talk|write)\s+(in\s+)?english/.test(t) ||
+      /respond\s+only\s+in\s+english/.test(t) ||
+      /english\s+only\b/.test(t)) return "en";
+  if (/(only|just|always)\s+(speak|reply|respond|talk|write)\s+(in\s+)?arabic/.test(t) ||
+      /respond\s+only\s+in\s+arabic/.test(t) ||
+      /arabic\s+only\b/.test(t)) return "ar";
+  if (/تكلم\s+(عربي|بالعربي|بالعربية)\s+(فقط|بس)/.test(text) ||
+      /(رد|جاوب)\s+(بالعربي|بالعربية)\s+(فقط|بس)?/.test(text)) return "ar";
+  if (/تكلم\s+(انجليزي|إنجليزي|بالإنجليزية|بالانجليزية)\s+(فقط|بس)?/.test(text) ||
+      /(رد|جاوب)\s+(بالانجليزي|بالإنجليزي|بالإنجليزية)\s+(فقط|بس)?/.test(text)) return "en";
+  if (/no\s+language\s+lock|stop\s+forcing\s+language|auto[- ]detect\s+language/.test(t) ||
+      /اوقف\s+القفل|تلقائي/.test(text)) return "clear";
+  return null;
+}
+
 export function ChatWorkspace({ threadId }: { threadId?: string } = {}) {
   const { user } = useAuth();
-  const { t, lang } = useI18n();
+  const { t, lang, setLang } = useI18n();
   const navigate = useNavigate();
-  const router = useRouter();
   const [search, setSearch] = useState("");
   const [convs, setConvs] = useState<Conv[]>(() => loadConvs());
+  const [forcedLang, setForcedLang] = useState<"ar" | "en" | null>(() => {
+    if (typeof window === "undefined") return null;
+    const v = sessionStorage.getItem(FORCED_LANG_KEY);
+    return v === "ar" || v === "en" ? v : null;
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (forcedLang) sessionStorage.setItem(FORCED_LANG_KEY, forcedLang);
+    else sessionStorage.removeItem(FORCED_LANG_KEY);
+  }, [forcedLang]);
+
+  // Keep refs so values used inside sendMessage body are always current
+  const forcedLangRef = useRef(forcedLang);
+  const langRef = useRef(lang);
+  useEffect(() => { forcedLangRef.current = forcedLang; }, [forcedLang]);
+  useEffect(() => { langRef.current = lang; }, [lang]);
 
   // Keep sessionStorage in sync
   useEffect(() => { saveConvs(convs); }, [convs]);
 
+  // Active conversation id — decoupled from the URL so the first message
+  // does NOT cause a route remount that loses the streaming state.
+  const [activeId, setActiveId] = useState<string | undefined>(threadId);
+  useEffect(() => { setActiveId(threadId); }, [threadId]);
+
   const currentConv = useMemo(
-    () => (threadId ? convs.find((c) => c.id === threadId) : undefined),
-    [convs, threadId],
+    () => (activeId ? convs.find((c) => c.id === activeId) : undefined),
+    [convs, activeId],
   );
 
-  const transport = useMemo(() => new DefaultChatTransport({ api: "/api/chat" }), []);
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport({
+        api: "/api/chat",
+        prepareSendMessagesRequest: ({ messages, body }) => ({
+          body: {
+            ...body,
+            messages,
+            forcedLang: forcedLangRef.current,
+            preferredLang: langRef.current,
+          },
+        }),
+      }),
+    [],
+  );
 
   const { messages, sendMessage, status, stop, setMessages } = useChat({
-    id: threadId ?? "new",
+    id: activeId ?? "new",
     messages: currentConv?.messages ?? [],
     transport,
     onError: (e) => toast.error(e.message),
     onFinish: ({ message }) => {
-      if (!threadId) return;
+      const tid = activeId;
+      if (!tid) return;
       const text = message.parts.map((p) => (p.type === "text" ? p.text : "")).join("").trim();
       if (!text) return;
       setConvs((prev) =>
         prev.map((c) =>
-          c.id === threadId
+          c.id === tid
             ? {
                 ...c,
                 updated_at: new Date().toISOString(),
@@ -87,7 +141,7 @@ export function ChatWorkspace({ threadId }: { threadId?: string } = {}) {
     },
   });
 
-  // Hydrate messages when switching threads
+  // Hydrate messages when the URL thread changes (user clicked a sidebar item)
   useEffect(() => {
     setMessages(currentConv?.messages ?? []);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -102,7 +156,16 @@ export function ChatWorkspace({ threadId }: { threadId?: string } = {}) {
   const onSend = useCallback(async (overrideText?: string) => {
     const text = (overrideText ?? input).trim();
     if (!text || !user || isLoading) return;
-    let convId = threadId;
+
+    // Detect explicit language-lock commands from the user
+    const cmd = detectForcedLang(text);
+    if (cmd === "clear") setForcedLang(null);
+    else if (cmd === "ar" || cmd === "en") {
+      setForcedLang(cmd);
+      setLang(cmd);
+    }
+
+    let convId = activeId;
     if (!convId) {
       convId = newId();
       const newConv: Conv = {
@@ -112,7 +175,12 @@ export function ChatWorkspace({ threadId }: { threadId?: string } = {}) {
         messages: [],
       };
       setConvs((prev) => [newConv, ...prev]);
-      router.navigate({ to: "/chat/$threadId", params: { threadId: convId } });
+      setActiveId(convId);
+      // Update the URL without remounting the route — preserves the
+      // in-flight stream and prevents duplicate conversation creation.
+      if (typeof window !== "undefined") {
+        window.history.replaceState(null, "", `/chat/${convId}`);
+      }
     }
     const userMsg: UIMessage = { id: newId(), role: "user", parts: [{ type: "text", text }] } as UIMessage;
     setConvs((prev) =>
@@ -124,11 +192,14 @@ export function ChatWorkspace({ threadId }: { threadId?: string } = {}) {
     );
     setInput("");
     await sendMessage({ text });
-  }, [input, user, isLoading, threadId, router, sendMessage]);
+  }, [input, user, isLoading, activeId, sendMessage, setLang]);
 
   const onDelete = (id: string) => {
     setConvs((prev) => prev.filter((c) => c.id !== id));
-    if (threadId === id) navigate({ to: "/chat" });
+    if (activeId === id) {
+      setActiveId(undefined);
+      navigate({ to: "/chat" });
+    }
   };
 
   const sortedConvs = [...convs].sort((a, b) => b.updated_at.localeCompare(a.updated_at));
@@ -138,7 +209,14 @@ export function ChatWorkspace({ threadId }: { threadId?: string } = {}) {
     <div className="flex h-screen">
       {/* Conversations sidebar */}
       <aside className="hidden w-72 shrink-0 flex-col border-e bg-sidebar/50 p-3 lg:flex">
-        <Button onClick={() => navigate({ to: "/chat" })} className="mb-3 w-full justify-start glow-electric">
+        <Button
+          onClick={() => {
+            setActiveId(undefined);
+            setMessages([]);
+            navigate({ to: "/chat" });
+          }}
+          className="mb-3 w-full justify-start glow-electric"
+        >
           <Plus className="me-2 h-4 w-4" /> {t("newChat")}
         </Button>
         <div className="relative mb-3">
@@ -153,7 +231,7 @@ export function ChatWorkspace({ threadId }: { threadId?: string } = {}) {
         <ScrollArea className="flex-1">
           <div className="space-y-1">
             {filteredConvs.map((c) => (
-              <div key={c.id} className={`group flex items-center rounded-lg px-2 py-1.5 text-sm transition ${threadId === c.id ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/60"}`}>
+              <div key={c.id} className={`group flex items-center rounded-lg px-2 py-1.5 text-sm transition ${activeId === c.id ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/60"}`}>
                 <button
                   onClick={() => navigate({ to: "/chat/$threadId", params: { threadId: c.id } })}
                   className="min-w-0 flex-1 truncate text-start"
@@ -263,9 +341,49 @@ export function ChatWorkspace({ threadId }: { threadId?: string } = {}) {
                 )}
               </div>
             </div>
-            <p className="mt-2 text-center text-xs text-muted-foreground">
-              {lang === "ar" ? "اضغط Enter للإرسال، Shift+Enter لسطر جديد، Esc للإيقاف" : "Enter to send · Shift+Enter for newline · Esc to stop"}
-            </p>
+            <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-xs text-muted-foreground">
+              <div className="inline-flex rounded-full border border-electric/30 bg-secondary/40 p-0.5">
+                <button
+                  type="button"
+                  onClick={() => { setLang("ar"); setForcedLang("ar"); }}
+                  className={`rounded-full px-3 py-1 text-[11px] font-semibold transition ${
+                    forcedLang === "ar"
+                      ? "bg-primary text-primary-foreground shadow-[0_0_18px_2px_rgba(64,180,255,0.55)]"
+                      : lang === "ar" ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  aria-pressed={forcedLang === "ar"}
+                  title="العربية"
+                >العربية</button>
+                <button
+                  type="button"
+                  onClick={() => { setLang("en"); setForcedLang("en"); }}
+                  className={`rounded-full px-3 py-1 text-[11px] font-semibold transition ${
+                    forcedLang === "en"
+                      ? "bg-primary text-primary-foreground shadow-[0_0_18px_2px_rgba(64,180,255,0.55)]"
+                      : lang === "en" ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  aria-pressed={forcedLang === "en"}
+                  title="English"
+                >English</button>
+                <button
+                  type="button"
+                  onClick={() => setForcedLang(null)}
+                  className={`rounded-full px-3 py-1 text-[11px] font-semibold transition ${
+                    forcedLang === null ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  title={lang === "ar" ? "تلقائي" : "Auto"}
+                >{lang === "ar" ? "تلقائي" : "Auto"}</button>
+              </div>
+              <span className="opacity-70">
+                {lang === "ar"
+                  ? forcedLang
+                    ? `مقفول على ${forcedLang === "ar" ? "العربية" : "الإنجليزية"} · اضغط Enter للإرسال`
+                    : "وضع تلقائي — أسترا تتبع لغتك · Enter للإرسال"
+                  : forcedLang
+                    ? `Locked to ${forcedLang === "ar" ? "Arabic" : "English"} · Enter to send`
+                    : "Auto mode — Astra follows your language · Enter to send"}
+              </span>
+            </div>
           </div>
         </div>
       </section>
