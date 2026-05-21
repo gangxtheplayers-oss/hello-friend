@@ -1,7 +1,7 @@
 import { Link, Outlet, useLocation } from "@tanstack/react-router";
 import { AstraLogo } from "./AstraLogo";
 import { useI18n } from "@/lib/i18n";
-import { Brain, CheckSquare, Globe, MessageSquare, Settings } from "lucide-react";
+import { Brain, CheckSquare, Globe, Home, MessageSquare, Settings } from "lucide-react";
 import { Button } from "./ui/button";
 
 export function AppShell() {
@@ -9,6 +9,7 @@ export function AppShell() {
   const { lang, setLang, t } = useI18n();
 
   const nav = [
+    { to: "/", label: lang === "ar" ? "الرئيسية" : "Home", icon: Home },
     { to: "/chat", label: t("chat"), icon: MessageSquare },
     { to: "/tasks", label: t("tasks"), icon: CheckSquare },
     { to: "/memories", label: t("memories"), icon: Brain },
@@ -18,13 +19,13 @@ export function AppShell() {
   return (
     <div className="flex min-h-screen">
       <aside className="hidden w-64 shrink-0 flex-col border-e bg-sidebar p-3 md:flex">
-        <Link to="/chat" className="mb-6 flex items-center gap-2 px-2 pt-2">
+        <Link to="/" className="mb-6 flex items-center gap-2 px-2 pt-2 transition hover:opacity-80" title={lang === "ar" ? "الرئيسية" : "Home"}>
           <AstraLogo className="h-7 w-7" />
           <span className="font-display text-base font-semibold">{t("appName")}</span>
         </Link>
         <nav className="flex flex-col gap-1">
           {nav.map((n) => {
-            const active = location.pathname.startsWith(n.to);
+            const active = n.to === "/" ? location.pathname === "/" : location.pathname.startsWith(n.to);
             const Icon = n.icon;
             return (
               <Link
