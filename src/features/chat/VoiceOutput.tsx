@@ -242,8 +242,9 @@ export function VoiceOutput({
 
       const utterance = new SpeechSynthesisUtterance(primary?.text ?? chunk);
       utterance.lang = selectedVoice?.lang || (runLang === "ar" ? "ar-SA" : "en-US");
-      utterance.rate = speedRef.current;
-      utterance.pitch = runLang === "ar" ? 1.03 : 1.05;
+      // Brighter, more energetic delivery — a touch quicker and higher pitch.
+      utterance.rate = Math.min(1.25, speedRef.current * 1.08);
+      utterance.pitch = runLang === "ar" ? 1.18 : 1.22;
       utterance.volume = 1;
       if (selectedVoice) utterance.voice = selectedVoice;
 
@@ -278,8 +279,8 @@ export function VoiceOutput({
           const v = pickBestVoice(pool, next.lang, currentPrefs);
           const u = new SpeechSynthesisUtterance(next.text);
           u.lang = v?.lang || (next.lang === "ar" ? "ar-SA" : "en-US");
-          u.rate = speedRef.current;
-          u.pitch = next.lang === "ar" ? 1.03 : 1.05;
+          u.rate = Math.min(1.25, speedRef.current * 1.08);
+          u.pitch = next.lang === "ar" ? 1.18 : 1.22;
           u.volume = 1;
           if (v) u.voice = v;
           u.onend = utterance.onend!;
